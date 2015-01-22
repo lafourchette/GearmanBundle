@@ -69,9 +69,13 @@ class GearmanExecuteTest extends WebTestCase
             ->willReturn($workers);
 
         // Prepare a dispatcher to listen to tested events
+        $startingFlag = false;
         $executedFlag = false;
 
         $dispatcher = new \Symfony\Component\EventDispatcher\EventDispatcher();
+        $dispatcher->addListener(GearmanEvents::GEARMAN_WORK_STARTING, function() use (&$startingFlag){
+            $startingFlag = true;
+        });
         $dispatcher->addListener(GearmanEvents::GEARMAN_WORK_EXECUTED, function() use (&$executedFlag){
             $executedFlag = true;
         });
@@ -88,7 +92,8 @@ class GearmanExecuteTest extends WebTestCase
         $worker->method('work')->will($this->returnCallback(function() use ($service, $object){
             $service->handleJob(new \GearmanJob(), array(
                 'job_object_instance' => $object,
-                'job_method' => 'myMethod'
+                'job_method' => 'myMethod',
+                'jobs' => array()
             ));
             return true;
         }));
@@ -97,6 +102,7 @@ class GearmanExecuteTest extends WebTestCase
         $service->executeJob('test', $worker);
 
         // Do we have the events ?
+        $this->assertTrue($startingFlag);
         $this->assertTrue($executedFlag);
     }
 }
