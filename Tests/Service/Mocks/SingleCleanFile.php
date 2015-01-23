@@ -7,4 +7,12 @@ namespace Mmoreram\GearmanBundle\Tests\Service\Mocks;
  */
 class SingleCleanFile
 {
+    /**
+     * My method
+     *
+     *
+     */
+    public function myMethod() {
+
+    }
 }
