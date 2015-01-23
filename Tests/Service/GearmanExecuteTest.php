@@ -35,7 +35,8 @@ class GearmanExecuteTest extends WebTestCase
         $worker = $this->getMockBuilder('\GearmanWorker')
             ->disableOriginalConstructor()
             ->getMock();
-        $worker->method('addServer')->willReturn(true);
+        $worker->expects($this->any())
+            ->method('addServer')->will($this->returnValue(true));
 
         // Wrapper mock
         $workers = array(
@@ -65,8 +66,9 @@ class GearmanExecuteTest extends WebTestCase
         $wrapper = $this->getMockBuilder('Mmoreram\GearmanBundle\Service\GearmanCacheWrapper')
             ->disableOriginalConstructor()
             ->getMock();
-        $wrapper->method('getWorkers')
-            ->willReturn($workers);
+        $wrapper->expects($this->any())
+            ->method('getWorkers')
+            ->will($this->returnValue($workers));
 
         // Prepare a dispatcher to listen to tested events
         $startingFlag = false;
@@ -89,7 +91,8 @@ class GearmanExecuteTest extends WebTestCase
 
         // Finalize worker mock by making it call our job object
         // This is normally handled by Gearman, but for test purpose we must simulate it
-        $worker->method('work')->will($this->returnCallback(function() use ($service, $object){
+        $worker->expects($this->any())
+            ->method('work')->will($this->returnCallback(function() use ($service, $object){
             $service->handleJob(new \GearmanJob(), array(
                 'job_object_instance' => $object,
                 'job_method' => 'myMethod',

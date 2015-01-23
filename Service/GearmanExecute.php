@@ -17,9 +17,6 @@ use Mmoreram\GearmanBundle\Event\GearmanWorkExecutedEvent;
 use Mmoreram\GearmanBundle\Event\GearmanWorkStartingEvent;
 use Mmoreram\GearmanBundle\GearmanEvents;
 use Mmoreram\GearmanBundle\Service\Abstracts\AbstractGearmanService;
-use Mmoreram\GearmanBundle\Event\GearmanWorkExecutedEvent;
-use Mmoreram\GearmanBundle\GearmanEvents;
-
 /**
  * Gearman execute methods. All Worker methods
  *
