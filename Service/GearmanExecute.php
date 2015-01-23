@@ -230,10 +230,14 @@ class GearmanExecute extends AbstractGearmanService
 
             foreach ($servers as $server) {
 
-                $gmworker->addServer($server['host'], $server['port']);
+                if(! $gmworker->addServer($server['host'], $server['port'])){
+                    throw new \GearmanException($gmworker->error());
+                };
             }
         } else {
-            $gmworker->addServer();
+            if(! $gmworker->addServer()){
+                throw new \GearmanException($gmworker->error());
+            }
         }
     }
 

@@ -116,6 +116,7 @@ class GearmanDescriber
         $output->writeln('<info>    @Worker\fileName : ' . $worker['fileName'] . '</info>');
         $output->writeln('<info>    @Worker\nameSpace : ' . $worker['namespace'] . '</info>');
         $output->writeln('<info>    @Worker\callableName: ' . $worker['callableName'] . '</info>');
+        $output->writeln('<info>    @Worker\signalable: ' . ($worker['signalable'] ? 'true' : 'false') . '</info>');
 
         /**
          * Also a complete and clean execution path is given , for supervisord
