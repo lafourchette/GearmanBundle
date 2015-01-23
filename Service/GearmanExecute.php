@@ -21,6 +21,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 use Mmoreram\GearmanBundle\Command\Util\GearmanOutputAwareInterface;
 use Mmoreram\GearmanBundle\Event\GearmanWorkExecutedEvent;
+use Mmoreram\GearmanBundle\Event\GearmanWorkStartingEvent;
 use Mmoreram\GearmanBundle\GearmanEvents;
 use Mmoreram\GearmanBundle\Service\Abstracts\AbstractGearmanService;
 
@@ -98,14 +99,15 @@ class GearmanExecute extends AbstractGearmanService
      * Executes a job given a jobName and given settings and annotations of job
      *
      * @param string $jobName Name of job to be executed
+     * @param GearmanWorker $gearmanWorker Worker instance to use
      */
-    public function executeJob($jobName)
+    public function executeJob($jobName, \GearmanWorker $gearmanWorker = null)
     {
         $worker = $this->getJob($jobName);
 
         if (false !== $worker) {
 
-            $this->callJob($worker);
+            $this->callJob($worker, $gearmanWorker);
         }
     }
 
@@ -113,12 +115,14 @@ class GearmanExecute extends AbstractGearmanService
      * Given a worker, execute GearmanWorker function defined by job.
      *
      * @param array $worker Worker definition
-     *
+     * @param GearmanWorker $gearmanWorker Worker instance to use
      * @return GearmanExecute self Object
      */
-    private function callJob(Array $worker)
+    private function callJob(Array $worker, \GearmanWorker $gearmanWorker = null)
     {
-        $gearmanWorker = new \GearmanWorker;
+        if(is_null($gearmanWorker)){
+            $gearmanWorker = new \GearmanWorker;
+        }
 
         if (isset($worker['job'])) {
 
@@ -202,7 +206,15 @@ class GearmanExecute extends AbstractGearmanService
          */
         foreach ($jobs as $job) {
 
-            $gearmanWorker->addFunction($job['realCallableName'], array($objInstance, $job['methodName']));
+            $gearmanWorker->addFunction(
+                $job['realCallableName'],
+                array($this, 'handleJob'),
+                array(
+                    'job_object_instance' => $objInstance,
+                    'job_method' => $job['methodName'],
+                    'jobs' => $jobs
+                )
+            );
         }
 
         /**
@@ -271,5 +283,45 @@ class GearmanExecute extends AbstractGearmanService
 
             $this->callJob($worker);
         }
+    }
+
+    /**
+     * Wrapper function handler for all registered functions
+     * This allows us to do some nice logging when jobs are started/finished
+     *
+     * @see https://github.com/brianlmoon/GearmanManager/blob/ffc828dac2547aff76cb4962bb3fcc4f454ec8a2/GearmanPeclManager.php#L95-206
+     *
+     * @param \GearmanJob $job
+     * @param mixed $context
+     *
+     * @return mixed
+     */
+    public function handleJob(\GearmanJob $job, $context)
+    {
+        if (
+            !is_array($context)
+            || !array_key_exists('job_object_instance', $context)
+            || !array_key_exists('job_method', $context)
+        ) {
+            throw new \InvalidArgumentException('$context shall be an array with job_object_instance and job_method key.');
+        }
+
+        $event = new GearmanWorkStartingEvent($context['jobs']);
+        $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_STARTING, $event);
+
+        $result = call_user_func_array(
+            array($context['job_object_instance'], $context['job_method']),
+            array($job, $context)
+        );
+
+        /**
+         * Workaround for PECL bug #17114
+         * http://pecl.php.net/bugs/bug.php?id=17114
+         */
+        $type = gettype($result);
+        settype($result, $type);
+
+        return $result;
+
     }
 }
