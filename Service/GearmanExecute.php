@@ -100,6 +100,7 @@ class GearmanExecute extends AbstractGearmanService
 
         // Makes agent non blocking
         $gearmanWorker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
+        $gearmanWorker->setTimeout(5); // poll every 5 seconds
 
         // Add servers
         if (isset($worker['job'])) {
@@ -120,7 +121,8 @@ class GearmanExecute extends AbstractGearmanService
             if( !extension_loaded('pcntl')){
                 throw new \Exception('pcntl should be loaded for signalable processes to work');
             }
-            pcntl_signal(SIGUSR1,  array($this, "handleSignal"));
+            declare(ticks = 1);
+            pcntl_signal(SIGTERM,  array($this, "handleSignal"));
         }
 
         $objInstance = $this->createJob($worker);
@@ -128,7 +130,7 @@ class GearmanExecute extends AbstractGearmanService
 
         // Clear signal handler
         if ($worker['signalable'] && extension_loaded('pcntl')) {
-            pcntl_signal(SIGUSR1,  SIG_DFL);
+            pcntl_signal(SIGTERM,  SIG_DFL);
         }
 
         return $this;
@@ -341,16 +343,22 @@ class GearmanExecute extends AbstractGearmanService
 
     private $isRequestedToStop = false;
 
+    /**
+     * Handler for signals sent by the kernel
+     *
+     * @param $signo Signal number
+     */
     public function handleSignal($signo)
     {
-        if($signo !== SIGUSR1) {
-
+        if($signo !== SIGTERM) {
             return;
         }
 
-        $this->isRequestedToStop = true;
-        if(! $this->isRunning) {
+        // Second SIGTERM kills for real
+        if($this->isRequestedToStop || ! $this->isRunning){
             exit(0);
         }
+
+        $this->isRequestedToStop = true;
     }
 }
