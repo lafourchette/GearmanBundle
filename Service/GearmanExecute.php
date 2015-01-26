@@ -115,8 +115,22 @@ class GearmanExecute extends AbstractGearmanService
             $this->addServers($gearmanWorker, $worker['servers']);
         }
 
+        // Signalable or not ?
+        if ($worker['signalable']) {
+            if( !extension_loaded('pcntl')){
+                throw new \Exception('pcntl should be loaded for signalable processes to work');
+            }
+            pcntl_signal(SIGUSR1,  array($this, "handleSignal"));
+            echo "registerSIGUSR1.";
+        }
+
         $objInstance = $this->createJob($worker);
         $this->runJob($gearmanWorker, $objInstance, $jobs, $iterations);
+
+        // Clear signal handler
+        if ($worker['signalable'] && extension_loaded('pcntl')) {
+            pcntl_signal(SIGUSR1,  SIG_DFL);
+        }
 
         return $this;
     }
@@ -205,13 +219,20 @@ class GearmanExecute extends AbstractGearmanService
             if ($gearmanWorker->returnCode() == GEARMAN_SUCCESS) {
                 $event = new GearmanWorkExecutedEvent($jobs, $iterations, $gearmanWorker->returnCode());
                 $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_EXECUTED, $event);
-                
+
+                $this->isRunning = false;
+
+                if ($this->isRequestedToStop) {
+                    break;
+                }
+
                 $iterations--;
 
                 /**
-                 * Only finishes its execution if alive is false and iterations arrives to 0
+                 * Only finishes its execution if alive is false and iterations arrives to 0, or if
+                 * signaled to stop
                  */
-                if (!$alive && $iterations <= 0) {
+                if (!$alive && $iterations <= 0 && !$this->isRequestedToStop) {
                     break;
                 }
 
@@ -299,6 +320,8 @@ class GearmanExecute extends AbstractGearmanService
         $event = new GearmanWorkStartingEvent($context['jobs']);
         $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_STARTING, $event);
 
+        $this->isRunning = true;
+
         $result = call_user_func_array(
             array($context['job_object_instance'], $context['job_method']),
             array($job, $context)
@@ -313,5 +336,22 @@ class GearmanExecute extends AbstractGearmanService
 
         return $result;
 
+    }
+
+    private $isRunning = false;
+
+    private $isRequestedToStop = false;
+
+    public function handleSignal($signo)
+    {
+        if($signo !== SIGUSR1) {
+
+            return;
+        }
+
+        $this->isRequestedToStop = true;
+        if(! $this->isRunning) {
+            exit(0);
+        }
     }
 }
