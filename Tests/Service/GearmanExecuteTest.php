@@ -48,6 +48,7 @@ class GearmanExecuteTest extends WebTestCase
                 'service'      => false,
                 'servers'      => array(),
                 'iterations'   => 1,
+                'signalable'   => false,
                 'jobs' => array(
                     0 => array(
                         'callableName'             => "test",

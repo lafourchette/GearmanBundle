@@ -2,7 +2,7 @@
 
 /**
  * Gearman Bundle for Symfony2
- * 
+ *
  * @author Marc Morera <yuhu@mmoreram.com>
  * @since 2013
  */
@@ -12,7 +12,6 @@ namespace Mmoreram\GearmanBundle\Service;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\ContainerAwareInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-
 use Mmoreram\GearmanBundle\Event\GearmanWorkExecutedEvent;
 use Mmoreram\GearmanBundle\Event\GearmanWorkStartingEvent;
 use Mmoreram\GearmanBundle\GearmanEvents;
@@ -24,14 +23,12 @@ use Mmoreram\GearmanBundle\Service\Abstracts\AbstractGearmanService;
  */
 class GearmanExecute extends AbstractGearmanService
 {
-
     /**
      * @var ContainerInterface
      *
      * Container instance
      */
     private $container;
-
 
     /**
      * @var EventDispatcherInterface
@@ -66,11 +63,10 @@ class GearmanExecute extends AbstractGearmanService
         return $this;
     }
 
-
     /**
      * Executes a job given a jobName and given settings and annotations of job
      *
-     * @param string $jobName Name of job to be executed
+     * @param string        $jobName       Name of job to be executed
      * @param GearmanWorker $gearmanWorker Worker instance to use
      */
     public function executeJob($jobName, \GearmanWorker $gearmanWorker = null)
@@ -78,76 +74,86 @@ class GearmanExecute extends AbstractGearmanService
         $worker = $this->getJob($jobName);
 
         if (false !== $worker) {
-
             $this->callJob($worker, $gearmanWorker);
         }
     }
 
-
     /**
      * Given a worker, execute GearmanWorker function defined by job.
      *
-     * @param array $worker Worker definition
+     * @param array         $worker        Worker definition
      * @param GearmanWorker $gearmanWorker Worker instance to use
      *
      * @return GearmanExecute self Object
      */
     private function callJob(Array $worker, \GearmanWorker $gearmanWorker = null)
     {
-        if(is_null($gearmanWorker)){
-            $gearmanWorker = new \GearmanWorker;
+        if (is_null($gearmanWorker)) {
+            $gearmanWorker = new \GearmanWorker();
         }
 
-        if (isset($worker['job'])) {
+        // Makes agent non blocking
+        $gearmanWorker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
+        // @todo Polling frequency should be configurable. 5s seems to be a good average.
+        $gearmanWorker->setTimeout(5);
 
+        // Add servers
+        if (isset($worker['job'])) {
             $jobs = array($worker['job']);
             $iterations = $worker['job']['iterations'];
             $this->addServers($gearmanWorker, $worker['job']['servers']);
-
         } else {
-
             $jobs = $worker['jobs'];
             $iterations = $worker['iterations'];
             $this->addServers($gearmanWorker, $worker['servers']);
         }
 
+        // Signalable or not ?
+        if ($worker['signalable']) {
+            if (!extension_loaded('pcntl')) {
+                throw new \Exception('pcntl should be loaded for signalable processes to work');
+            }
+            declare (ticks = 1);
+            pcntl_signal(SIGTERM,  array($this, 'handleSignal'));
+        }
+
         $objInstance = $this->createJob($worker);
         $this->runJob($gearmanWorker, $objInstance, $jobs, $iterations);
+
+        // Clear signal handler
+        if ($worker['signalable'] && extension_loaded('pcntl')) {
+            pcntl_signal(SIGTERM,  SIG_DFL);
+        }
 
         return $this;
     }
 
-
     /**
      * Given a worker settings, return Job instance
-     * 
+     *
      * @param array $worker Worker settings
-     * 
+     *
      * @return Object Job instance
      */
     private function createJob(array $worker)
     {
         /**
          * If service is defined, we must retrieve this class with dependency injection
-         * 
+         *
          * Otherwise we just create it with a simple new()
          */
         if ($worker['service']) {
-
             $objInstance = $this->container->get($worker['service']);
-
         } else {
-
-            $objInstance = new $worker['className'];
+            $objInstance = new $worker['className']();
 
             /**
              * If instance of given object is instanceof ContainerAwareInterface, we inject full container
              *  by calling container setter.
-             * 
+             *
              * @see https://github.com/mmoreram/gearman-bundle/pull/12
              */
             if ($objInstance instanceof ContainerAwareInterface) {
-
                 $objInstance->setContainer($this->container);
             }
         }
@@ -155,32 +161,29 @@ class GearmanExecute extends AbstractGearmanService
         return $objInstance;
     }
 
-
     /**
      * Given a GearmanWorker and an instance of Job, run it
-     * 
+     *
      * @param \GearmanWorker $gearmanWorker Gearman Worker
      * @param Object         $objInstance   Job instance
      * @param array          $jobs          Array of jobs to subscribe
      * @param integer        $iterations    Number of iterations
-     * 
+     *
      * @return GearmanExecute self Object
      */
     private function runJob(\GearmanWorker $gearmanWorker, $objInstance, array $jobs, $iterations)
     {
-
         /**
          * Every job defined in worker is added into GearmanWorker
          */
         foreach ($jobs as $job) {
-
             $gearmanWorker->addFunction(
                 $job['realCallableName'],
                 array($this, 'handleJob'),
                 array(
                     'job_object_instance' => $objInstance,
                     'job_method' => $job['methodName'],
-                    'jobs' => $jobs
+                    'jobs' => $jobs,
                 )
             );
         }
@@ -188,34 +191,49 @@ class GearmanExecute extends AbstractGearmanService
         /**
          * If iterations value is 0, is like worker will never die
          */
-        $alive = ( 0 == $iterations );
+        $alive = (0 == $iterations);
 
         /**
          * Executes GearmanWorker with all jobs defined
          */
-        while ($gearmanWorker->work()) {
+        while (
+            @$gearmanWorker->work() ||
+            $gearmanWorker->returnCode() == GEARMAN_IO_WAIT ||
+            $gearmanWorker->returnCode() == GEARMAN_NO_JOBS
+        ) {
+            if ($gearmanWorker->returnCode() == GEARMAN_SUCCESS) {
+                $event = new GearmanWorkExecutedEvent($jobs, $iterations, $gearmanWorker->returnCode());
+                $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_EXECUTED, $event);
 
-            $iterations--;
+                $this->isRunning = false;
 
-            $event = new GearmanWorkExecutedEvent($jobs, $iterations, $gearmanWorker->returnCode());
-            $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_EXECUTED, $event);
+                $iterations--;
 
-            if ($gearmanWorker->returnCode() != GEARMAN_SUCCESS) {
+                /**
+                 * Only finishes its execution if alive is false and iterations arrives to 0, or if
+                 * signaled to stop
+                 */
+                if ((!$alive && $iterations <= 0) || $this->isRequestedToStop) {
+                    break;
+                }
 
-                break;
+                continue;
             }
 
-            /**
-             * Only finishes its execution if alive is false and iterations arrives to 0
-             */
-            if (!$alive && $iterations <= 0) {
+            if (! @$gearmanWorker->wait()) {
+                if ($gearmanWorker->returnCode() == GEARMAN_NO_ACTIVE_FDS) {
+                    // @todo Reset frequency should be configurable. 5s seems to be a good average.
+                    sleep(5);
+                    continue;
+                }
+                if ($gearmanWorker->returnCode() == GEARMAN_TIMEOUT) {
+                    continue;
+                }
 
                 break;
             }
         }
-
     }
-
 
     /**
      * Adds into worker all defined Servers.
@@ -227,16 +245,17 @@ class GearmanExecute extends AbstractGearmanService
     private function addServers(\GearmanWorker $gmworker, Array $servers)
     {
         if (!empty($servers)) {
-
             foreach ($servers as $server) {
-
-                $gmworker->addServer($server['host'], $server['port']);
+                if (! $gmworker->addServer($server['host'], $server['port'])) {
+                    throw new \GearmanException($gmworker->error());
+                };
             }
         } else {
-            $gmworker->addServer();
+            if (! $gmworker->addServer()) {
+                throw new \GearmanException($gmworker->error());
+            }
         }
     }
-
 
     /**
      * Executes a worker given a workerName subscribing all his jobs inside and given settings and annotations of worker and jobs
@@ -248,7 +267,6 @@ class GearmanExecute extends AbstractGearmanService
         $worker = $this->getWorker($workerName);
 
         if (false !== $worker) {
-
             $this->callJob($worker);
         }
     }
@@ -260,7 +278,7 @@ class GearmanExecute extends AbstractGearmanService
      * @see https://github.com/brianlmoon/GearmanManager/blob/ffc828dac2547aff76cb4962bb3fcc4f454ec8a2/GearmanPeclManager.php#L95-206
      *
      * @param \GearmanJob $job
-     * @param mixed $context
+     * @param mixed       $context
      *
      * @return mixed
      */
@@ -277,6 +295,8 @@ class GearmanExecute extends AbstractGearmanService
         $event = new GearmanWorkStartingEvent($context['jobs']);
         $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_STARTING, $event);
 
+        $this->isRunning = true;
+
         $result = call_user_func_array(
             array($context['job_object_instance'], $context['job_method']),
             array($job, $context)
@@ -290,6 +310,28 @@ class GearmanExecute extends AbstractGearmanService
         settype($result, $type);
 
         return $result;
+    }
 
+    private $isRunning = false;
+
+    private $isRequestedToStop = false;
+
+    /**
+     * Handler for signals sent by the kernel
+     *
+     * @param $signo Signal number
+     */
+    public function handleSignal($signo)
+    {
+        if ($signo !== SIGTERM) {
+            return;
+        }
+
+        // Second SIGTERM kills for real
+        if ($this->isRequestedToStop || ! $this->isRunning) {
+            exit(0);
+        }
+
+        $this->isRequestedToStop = true;
     }
 }

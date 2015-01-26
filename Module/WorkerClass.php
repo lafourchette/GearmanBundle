@@ -122,6 +122,13 @@ class WorkerClass
      */
     private $jobPrefix = null;
 
+    /**
+     * Worker can be cleanly stopped
+     *
+     * @var bool
+     */
+    private $signalable;
+
 
     /**
      * Retrieves all jobs available from worker
@@ -177,6 +184,7 @@ class WorkerClass
         $this->iterations = $this->loadIterations($workAnnotation, $defaultSettings);
         $this->defaultMethod = $this->loadDefaultMethod($workAnnotation, $defaultSettings);
         $this->jobCollection = $this->createJobCollection($reflectionClass, $reader);
+        $this->signalable = $this->loadSignalable($workAnnotation, $defaultSettings);
     }
 
 
@@ -293,6 +301,23 @@ class WorkerClass
         return $jobCollection;
     }
 
+    /**
+     * Load signalable
+     *
+     * If signalable is defined in WorkAnnotation, this one is used.
+     * Otherwise is used set in Class
+     *
+     * @param WorkAnnotation $workAnnotation  WorkAnnotation class
+     * @param array          $defaultSettings Default settings for Worker
+     *
+     * @return bool Signalable
+     */
+    private function loadSignalable(WorkAnnotation $workAnnotation, array $defaultSettings)
+    {
+        return is_null($workAnnotation->signalable)
+            ? (boolean) $defaultSettings['signalable']
+            : (boolean) $workAnnotation->signalable;
+    }
 
     /**
      * Retrieve all Worker data in cache format
@@ -312,6 +337,7 @@ class WorkerClass
             'servers'       =>  $this->servers,
             'iterations'    =>  $this->iterations,
             'jobs'          =>  $this->jobCollection->toArray(),
+            'signalable'    => $this->signalable,
         );
     }
 

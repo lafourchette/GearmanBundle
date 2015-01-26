@@ -89,6 +89,9 @@ class Configuration implements ConfigurationInterface
                         ->scalarNode('workers_name_prepend_namespace')
                             ->defaultTrue()
                         ->end()
+                        ->scalarNode('signalable')
+                            ->defaultFalse()
+                        ->end()
                     ->end()
                 ->end()
             ->end();

@@ -58,6 +58,12 @@ class Work extends Annotation
      */
     public $defaultMethod;
 
+    /**
+     * Worker can be cleanly stopped
+     *
+     * @var bool
+     */
+    public $signalable;
 
     /**
      * Service typeof Class. If it's defined, object will be instanced throught service dependence injection.
