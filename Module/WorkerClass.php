@@ -301,14 +301,23 @@ class WorkerClass
         return $jobCollection;
     }
 
+    /**
+     * Load signalable
+     *
+     * If signalable is defined in WorkAnnotation, this one is used.
+     * Otherwise is used set in Class
+     *
+     * @param WorkAnnotation $workAnnotation  WorkAnnotation class
+     * @param array          $defaultSettings Default settings for Worker
+     *
+     * @return bool Signalable
+     */
     private function loadSignalable(WorkAnnotation $workAnnotation, array $defaultSettings)
     {
-
-        return  is_null($workAnnotation->signalable)
+        return is_null($workAnnotation->signalable)
             ? (boolean) $defaultSettings['signalable']
             : (boolean) $workAnnotation->signalable;
     }
-
 
     /**
      * Retrieve all Worker data in cache format
