@@ -114,7 +114,7 @@ class GearmanExecute extends AbstractGearmanService
                 throw new \Exception('pcntl should be loaded for signalable processes to work');
             }
             declare (ticks = 1);
-            pcntl_signal(SIGTERM,  array($this, "handleSignal"));
+            pcntl_signal(SIGTERM,  array($this, 'handleSignal'));
         }
 
         $objInstance = $this->createJob($worker);
