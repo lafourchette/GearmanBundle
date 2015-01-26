@@ -98,6 +98,10 @@ class GearmanExecute extends AbstractGearmanService
             $gearmanWorker = new \GearmanWorker;
         }
 
+        // Makes agent non blocking
+        $gearmanWorker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
+
+        // Add servers
         if (isset($worker['job'])) {
 
             $jobs = array($worker['job']);
@@ -193,27 +197,41 @@ class GearmanExecute extends AbstractGearmanService
         /**
          * Executes GearmanWorker with all jobs defined
          */
-        while ($gearmanWorker->work()) {
+        while (
+            @$gearmanWorker->work() ||
+            $gearmanWorker->returnCode() == GEARMAN_IO_WAIT ||
+            $gearmanWorker->returnCode() == GEARMAN_NO_JOBS
+        ){
+            if ($gearmanWorker->returnCode() == GEARMAN_SUCCESS) {
+                $event = new GearmanWorkExecutedEvent($jobs, $iterations, $gearmanWorker->returnCode());
+                $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_EXECUTED, $event);
+                
+                $iterations--;
 
-            $iterations--;
+                /**
+                 * Only finishes its execution if alive is false and iterations arrives to 0
+                 */
+                if (!$alive && $iterations <= 0) {
+                    break;
+                }
 
-            $event = new GearmanWorkExecutedEvent($jobs, $iterations, $gearmanWorker->returnCode());
-            $this->eventDispatcher->dispatch(GearmanEvents::GEARMAN_WORK_EXECUTED, $event);
-
-            if ($gearmanWorker->returnCode() != GEARMAN_SUCCESS) {
-
-                break;
+                continue;
             }
 
-            /**
-             * Only finishes its execution if alive is false and iterations arrives to 0
-             */
-            if (!$alive && $iterations <= 0) {
+            if (! @$gearmanWorker->wait()) {
+                if ($gearmanWorker->returnCode() == GEARMAN_NO_ACTIVE_FDS)
+                {
+                    sleep(5);
+                    continue;
+                }
+                if ($gearmanWorker->returnCode() == GEARMAN_TIMEOUT)
+                {
+                    continue;
+                }
 
                 break;
             }
         }
-
     }
 
 
