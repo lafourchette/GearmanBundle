@@ -213,7 +213,7 @@ class GearmanExecute extends AbstractGearmanService
                  * Only finishes its execution if alive is false and iterations arrives to 0, or if
                  * signaled to stop
                  */
-                if ((!$alive && $iterations <= 0) || $this->isRequestedToStop) {
+                if ((!$alive && $iterations <= 0) || $this->isRequestedToStop) {
                     break;
                 }
 

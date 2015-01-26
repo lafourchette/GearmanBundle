@@ -92,6 +92,7 @@ class WorkerClassTest extends \PHPUnit_Framework_TestCase
         'jobPrefix'     =>  null,
         'generate_unique_key' => true,
         'workers_name_prepend_namespace' => true,
+        'signalable'    =>  false,
     );
 
 
@@ -165,6 +166,7 @@ class WorkerClassTest extends \PHPUnit_Framework_TestCase
             ->method('getMethodAnnotations');
 
         $this->workAnnotation->name = 'myOtherWorkerName';
+        $this->workAnnotation->signalable = false;
         $this->workAnnotation->description = 'This is my own description';
         $this->workAnnotation->iterations = 200;
         $this->workAnnotation->defaultMethod = 'doHighBackground';
@@ -188,6 +190,7 @@ class WorkerClassTest extends \PHPUnit_Framework_TestCase
             'servers'               =>  $this->workAnnotation->servers,
             'iterations'            =>  $this->workAnnotation->iterations,
             'jobs'                  =>  array(),
+            'signalable'            =>  false
         ));
     }
 
@@ -242,6 +245,7 @@ class WorkerClassTest extends \PHPUnit_Framework_TestCase
             'servers'               =>  $this->servers,
             'iterations'            =>  $this->defaultSettings['iterations'],
             'jobs'                  =>  array(),
+            'signalable'            => false,
         ));
     }
 
@@ -297,6 +301,7 @@ class WorkerClassTest extends \PHPUnit_Framework_TestCase
             'servers'               =>  array($this->workAnnotation->servers),
             'iterations'            =>  $this->defaultSettings['iterations'],
             'jobs'                  =>  array(),
+            'signalable'            => false,
         ));
     }
 }
