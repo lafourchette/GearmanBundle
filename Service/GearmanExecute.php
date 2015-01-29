@@ -95,7 +95,7 @@ class GearmanExecute extends AbstractGearmanService
         // Makes agent non blocking
         $gearmanWorker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
         // @todo Polling frequency should be configurable. 5s seems to be a good average.
-        $gearmanWorker->setTimeout(5);
+        $gearmanWorker->setTimeout(5000);
 
         // Add servers
         if (isset($worker['job'])) {
